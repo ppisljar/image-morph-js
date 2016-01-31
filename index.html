@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style>
+        .img {
+            display: inline-block;
+        }
+
+        .frames img {
+            width: 64px;
+        }
+    </style>
+</head>
+<body>
+
+    <p>define matching points on both images (in same order)</p>
+    <div class="img">
+        <canvas id="canvas1" width="600" height="600"></canvas><br>
+        <input type="button" class="clear" value="clear points" target="canvas1">
+        <input type="file" target="canvas1">
+    </div>
+    <div class="img">
+        <canvas id="canvas2" width="600"  height="600"></canvas><br>
+        <input type="button" class="clear" value="clear points" target="canvas2">
+        <input type="file" target="canvas2">
+    </div>
+
+    <div class="img">
+        <canvas id="result" width="600" height="600"></canvas><br>
+        <input type="text" id="frames" value="30">
+        <input type="button" id="generate" value="generate">
+        <input type="button" onclick="draw()" value="draw">
+
+    </div>
+
+    <div>
+        <img id="gif">
+    </div>
+
+    <div class="frames">
+
+    </div>
+
+    <script src="//code.jquery.com/jquery-1.12.0.min.js"></script>
+    <script src="imgwarp.js"></script>
+    <script src="gif.js"></script>
+    <script>
+
+
+        var warper = {};
+        var loadImg = function(target, canvas, img) {
+            var ratio = canvas.width / img.width;      // set canvas size big enough for the image
+            canvas.height = img.height*ratio
+            var ctx = canvas.getContext("2d");
+            ctx.drawImage(img,0,0, img.width, img.height, 0, 0, canvas.width, canvas.height);
+
+            img.width = canvas.width;
+            img.height = canvas.height;
+            var imageData = ctx.getImageData(0, 0, img.width, img.height);
+            if (warper[target]) delete warper[target];
+            warper[target] = new ImgWarper.PointDefiner(canvas, img, imageData);
+        };
+
+        var img1 = new Image();
+        img1.onload = function() {
+            var img = img1;
+            var target = 'canvas1';
+            var canvas = document.getElementById(target);
+            loadImg(target, canvas, img);
+
+            var points = JSON.parse('[{"x":193,"y":216},{"x":226,"y":212},{"x":260,"y":219},{"x":306,"y":218},{"x":338,"y":208},{"x":370,"y":215},{"x":206,"y":229},{"x":226,"y":225},{"x":249,"y":230},{"x":314,"y":230},{"x":340,"y":224},{"x":361,"y":231},{"x":265,"y":313},{"x":297,"y":314},{"x":236,"y":360},{"x":282,"y":361},{"x":325,"y":360},{"x":251,"y":427},{"x":316,"y":428},{"x":165,"y":256},{"x":407,"y":253},{"x":199,"y":112},{"x":354,"y":103},{"x":188,"y":332},{"x":383,"y":328},{"x":211,"y":376},{"x":356,"y":383},{"x":124,"y":403},{"x":444,"y":405},{"x":178,"y":46},{"x":397,"y":49}]');
+            for (var x = 0; x < points.length; x++) {
+                points[x] = new ImgWarper.Point(points[x].x, points[x].y);
+            }
+            warper[target].oriPoints = points;
+            warper[target].dstPoints = points;
+            warper[target].redraw();
+
+        };
+        img1.src = "face1.jpg";
+
+        var img2 = new Image();
+        img2.onload = function(img) {
+            var img = img2;
+            var target = 'canvas2';
+            var canvas = document.getElementById(target);
+            loadImg(target, canvas, img);
+
+            var points = JSON.parse('[{"x":191,"y":228},{"x":217,"y":217},{"x":268,"y":233},{"x":335,"y":231},{"x":383,"y":222},{"x":410,"y":229},{"x":214,"y":258},{"x":240,"y":253},{"x":262,"y":258},{"x":340,"y":260},{"x":363,"y":253},{"x":390,"y":257},{"x":285,"y":339},{"x":322,"y":337},{"x":256,"y":379},{"x":302,"y":381},{"x":348,"y":379},{"x":270,"y":453},{"x":324,"y":454},{"x":160,"y":273},{"x":440,"y":274},{"x":242,"y":122},{"x":345,"y":121},{"x":190,"y":375},{"x":413,"y":373},{"x":221,"y":411},{"x":385,"y":411},{"x":106,"y":531},{"x":497,"y":534},{"x":200,"y":69},{"x":415,"y":69}]');
+            for (var x = 0; x < points.length; x++) {
+                points[x] = new ImgWarper.Point(points[x].x, points[x].y);
+            }
+            warper[target].oriPoints = points;
+            warper[target].dstPoints = points;
+            warper[target].redraw();
+        };
+        img2.src = "face2.jpg";
+
+        $("input.clear").click(function() {
+            var target = $(this).attr('target');
+            warper[target].oriPoints = [];
+            warper[target].dstPoints = [];
+            warper[target].redraw();
+        });
+
+        $("input[type=file]").on("change", function() {
+            var file = this.files[0];
+            var fr = new FileReader();
+            var target = $(this).attr('target');
+            var canvas=document.getElementById(target);
+            fr.onload = function() {
+                var img = new Image();
+                img.onload = function() { loadImg(target, canvas, img); };
+                img.src = fr.result
+            };;
+            fr.readAsDataURL(file)
+        });
+
+        var animator = null;
+        var frames = [];
+        $("#generate").click(function() {
+            // get points from both images
+            animator = new ImgWarper.Animator(warper['canvas1'], warper['canvas2']);
+            animator.generate($("#frames").val());
+
+
+            draw_all();
+        });
+
+        var play_frame = 0;
+        var direction = true;
+        var res_c = document.getElementById("result");
+        var res_ctx = res_c.getContext('2d');
+        var cnt = 0;
+
+
+        function draw_all() {
+            var frames = animator.frames;
+
+            for (var x = 0; x < frames.length; x++) {
+                res_ctx.putImageData(frames[x],0,0);
+                var image = document.createElement("img");
+                image.src = res_c.toDataURL("image/png");
+                $(".frames").append(image);
+            }
+
+            for (var x = frames.length-1; x >= 0; x--) {
+                res_ctx.putImageData(frames[x],0,0);
+                var image = document.createElement("img");
+                image.src = res_c.toDataURL("image/png");
+                $(".frames").append(image);
+
+            }
+
+        }
+
+        function draw() {
+            res_ctx.putImageData(frames[play_frame],0,0);
+            play_frame = direction ? play_frame + 1 : play_frame - 1;
+            if (play_frame == 0 || play_frame == frames.length - 1) direction = !direction;
+
+            //window.requestAnimationFrame(draw);
+        }
+    </script>
+</body>
+</html>
